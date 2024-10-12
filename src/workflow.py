@@ -1,6 +1,8 @@
 from llama_index.core.workflow import Event
 from llama_index.core.schema import NodeWithScore
 from .trace import init_tracing
+
+
 class RetrieverEvent(Event):
     """Result of running retrieval"""
 
@@ -11,6 +13,7 @@ class RerankEvent(Event):
     """Result of running reranking on retrieved nodes"""
 
     nodes: list[NodeWithScore]
+
 
 from llama_index.core import SimpleDirectoryReader, VectorStoreIndex
 from llama_index.core.response_synthesizers import CompactAndRefine
@@ -43,9 +46,7 @@ class RAGWorkflow(Workflow):
         return StopEvent(result=index)
 
     @step
-    async def retrieve(
-        self, ctx: Context, ev: StartEvent
-    ) -> RetrieverEvent | None:
+    async def retrieve(self, ctx: Context, ev: StartEvent) -> RetrieverEvent | None:
         "Entry point for RAG, triggered by a StartEvent with `query`."
         query = ev.get("query")
         index = ev.get("index")
@@ -91,6 +92,7 @@ class RAGWorkflow(Workflow):
         response = await summarizer.asynthesize(query, nodes=ev.nodes)
         return StopEvent(result=response)
 
+
 w = RAGWorkflow()
 
 # Ingest the documents
@@ -102,28 +104,5 @@ async for chunk in result.async_response_gen():
     print(chunk, end="", flush=True)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
     init_tracing()
-

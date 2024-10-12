@@ -5,7 +5,8 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
 )
 from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
 
-def init_tracing(): 
+
+def init_tracing():
     # Add Phoenix
     span_phoenix_processor = SimpleSpanProcessor(
         HTTPSpanExporter(endpoint="https://app.phoenix.arize.com/v1/traces")

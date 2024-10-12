@@ -10,16 +10,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class VectorStore(BaseReader):
-    def __init__(self, 
-        input_dir="./out", 
-        recursive=True, 
-        exclude=["*.srt"], 
+    def __init__(
+        self,
+        input_dir="./out",
+        recursive=True,
+        exclude=["*.srt"],
         file_metadata=lambda x: {"source": x},
-        pinecone_api_key=os.environ['PINECONE_API'], 
-        index_name=os.getenv("PINECONE_INDEX_NAME")):
-
-
+        pinecone_api_key=os.environ["PINECONE_API"],
+        index_name=os.getenv("PINECONE_INDEX_NAME"),
+    ):
         self.input_dir = input_dir
         self.recursive = recursive
         self.exclude = exclude
@@ -32,24 +33,23 @@ class VectorStore(BaseReader):
             input_dir=self.input_dir,
             recursive=self.recursive,
             exclude=self.exclude,
-            file_metadata=self.file_metadata
+            file_metadata=self.file_metadata,
         )
         return reader.load_data()
 
     def instantiate_index(self):
         pc = Pinecone(api_key=self.pinecone_api_key)
         if self.index_name not in pc.list_indexes().names():
-            
             pc.create_index(
-            name=self.index_name,
-            dimension=1536,
-            metric="dotproduct",
-            spec=ServerlessSpec(cloud="aws", region="us-east-1"),
-        )
+                name=self.index_name,
+                dimension=1536,
+                metric="dotproduct",
+                spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+            )
             return pc.Index(self.index_name)
         else:
             return pc.Index(self.index_name)
-    
+
     def populate_index(self):
         documents = self.load_data()
         index = self.instantiate_index()
@@ -68,7 +68,7 @@ class VectorStore(BaseReader):
         return index.as_query_engine()
 
 
-if __name__ == "__main__":  
+if __name__ == "__main__":
     vc = VectorStore()
     qe = vc.query_engine()
 
