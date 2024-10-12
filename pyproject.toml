@@ -9,6 +9,8 @@ dependencies = [
     "llama-index-core>=0.11.17",
     "llama-index-vector-stores-pinecone>=0.2.1",
     "llama-index>=0.11.17",
+    "openinference-instrumentation-llama-index==3.0.2",
+    "opentelemetry-instrumentation==0.48b0",
     "python-dotenv>=1.0.1",
     "reflex>=0.6.2.post1",
     "ruff>=0.6.9",
