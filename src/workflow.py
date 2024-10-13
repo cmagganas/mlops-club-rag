@@ -1,164 +1,170 @@
-import asyncio
+#!/usr/bin/env python
+# coding: utf-8
+
+import nest_asyncio
 import os
+from dotenv import load_dotenv
+from pinecone import Pinecone
+from llama_index.core import PromptTemplate
 from llama_index.core.workflow import Event
 from llama_index.core.schema import NodeWithScore
-from trace import init_tracing
-from vector_store import VectorStore
-
-from pinecone import Pinecone
-
-
-class RetrieverEvent(Event):
-    """Result of running retrieval"""
-
-    nodes: list[NodeWithScore]
-
-
-class RerankEvent(Event):
-    """Result of running reranking on retrieved nodes"""
-
-    nodes: list[NodeWithScore]
-
-
-from llama_index.core import VectorStoreIndex
-from llama_index.core.response_synthesizers import CompactAndRefine
-from llama_index.core.postprocessor.llm_rerank import LLMRerank
 from llama_index.core.workflow import (
-    Context,
     Workflow,
+    step,
+    Context,
     StartEvent,
     StopEvent,
-    step,
+)
+from llama_index.core import StorageContext, VectorStoreIndex
+from llama_index.core.query_pipeline import QueryPipeline
+from llama_index.llms.openai import OpenAI
+from llama_index.core.base.base_retriever import BaseRetriever
+from llama_index.vector_stores.pinecone import PineconeVectorStore
+from llama_index.utils.workflow import draw_all_possible_flows
+from IPython.display import Markdown, display
+
+nest_asyncio.apply()
+load_dotenv()
+
+PINECONE_API = os.environ["PINECONE_API"]
+PINECONE_INDEX_NAME = os.environ["PINECONE_INDEX_NAME"]
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+PHOENIX_API_KEY = os.environ["PHOENIX_API_KEY"]
+OTEL_EXPORTER_OTLP_HEADERS = os.environ["OTEL_EXPORTER_OTLP_HEADERS"]
+PHOENIX_CLIENT_HEADERS = os.environ["PHOENIX_CLIENT_HEADERS"]
+PHOENIX_COLLECTOR_ENDPOINT = os.environ["PHOENIX_COLLECTOR_ENDPOINT"]
+
+pc = Pinecone(api_key=os.environ["PINECONE_API"])
+index_name = os.environ["PINECONE_INDEX_NAME"]
+pinecone_index = pc.Index(index_name)
+
+DEFAULT_RAG_PROMPT = PromptTemplate(
+    template="""Use the provided context to answer the question. If you don't know the answer, say you don't know.
+
+    Context:
+    {context}
+
+    Question:
+    {question}
+    """
 )
 
-from llama_index.llms.openai import OpenAI
-from llama_index.vector_stores.pinecone import PineconeVectorStore
+class PrepEvent(Event):
+    """Prep event (prepares for retrieval)."""
+    pass
 
+class RetrieveEvent(Event):
+    """Retrieve event (gets retrieved nodes)."""
+    retrieved_nodes: list[NodeWithScore]
 
-class RAGWorkflow(Workflow):
-    # @step
-    # async def load(self, ctx: Context, ev: StartEvent) -> StopEvent | None:
-    #     """Entry point to ingest a document, triggered by a StartEvent with `dirname`."""
-    #     dirname = ev.get("dirname")
-    #     if not dirname:
-    #         return None
+class AugmentGenerateEvent(Event):
+    """Query event. Queries given relevant text and search text."""
+    relevant_text: str
+    search_text: str
 
-    #     # Use VectorStore to get the index
-    #     vector_store = VectorStore(input_dir=dirname)
-    #     index = vector_store.populate_index()
-        
-    #     return LoadIndexEvent(index=index)
-
+class WorkflowRAG(Workflow):
     @step
-    async def retrieve(self, ctx: Context, ev: StartEvent) -> RetrieverEvent | None:
-        print("Starting retrieve step")
-        query = ev.get("query")
+    async def initialize_index(self, ctx: Context, ev: StartEvent) -> StopEvent | None:
+        """Initializing index."""
         pc = Pinecone(api_key=os.environ["PINECONE_API"])
+        index_name = os.environ["PINECONE_INDEX_NAME"]
+        pinecone_index = pc.Index(index_name)
 
-        pinecone_index = pc.Index(os.environ["PINECONE_INDEX_NAME"])
         vector_store = PineconeVectorStore(
             pinecone_index=pinecone_index,
+            add_sparse_vector=True,
         )
-        index = VectorStoreIndex.from_vector_store(vector_store)
-
-        if not query:
-            print("No query provided")
-            return None
-
-        print(f"Query the database with: {query}")
-
-        # store the query in the global context
-        await ctx.set("query", query)
-
-        # get the index from the global context
-        if index is None:
-            print("Index is empty, load some documents before querying!")
-            return None
-
-        retriever = index.as_retriever(similarity_top_k=2)
-        nodes = await retriever.aretrieve(query)
-        print(f"Retrieved {len(nodes)} nodes.")
-        print("Finished retrieve step")
-        return RetrieverEvent(nodes=nodes)
+        storage_context = StorageContext.from_defaults(vector_store=vector_store)
+        index = VectorStoreIndex.from_documents(
+            [], storage_context=storage_context
+        )
+        return StopEvent(result=index)
 
     @step
-    async def rerank(self, ctx: Context, ev: RetrieverEvent) -> RerankEvent:
-        print("Starting rerank step")
-        # Rerank the nodes
-        ranker = LLMRerank(
-            choice_batch_size=5, top_n=3, llm=OpenAI(model="gpt-4o-mini")
-        )
-        query = await ctx.get("query", default=None)
-        print(f"Query for reranking: {query}", flush=True)
-        new_nodes = ranker.postprocess_nodes(
-            ev.nodes, query_str=query
-        )
-        print(f"Reranked nodes to {len(new_nodes)}")
-        print("Finished rerank step")
-        return RerankEvent(nodes=new_nodes)
+    async def prepare_for_retrieval(
+        self, ctx: Context, ev: StartEvent
+    ) -> PrepEvent | None:
+        """Prepare for retrieval."""
+        query_str: str | None = ev.get("query_str")
+        retriever_kwargs: dict | None = ev.get("retriever_kwargs", {})
 
-    @step
-    async def synthesize(self, ctx: Context, ev: RerankEvent) -> StopEvent:
-        print("Starting synthesize step")
-        """Return a streaming response using reranked nodes."""
+        if query_str is None:
+            return None
+
+        index = ev.get("index")
+
         llm = OpenAI(model="gpt-4o-mini")
-        summarizer = CompactAndRefine(llm=llm, streaming=True, verbose=True)
-        query = await ctx.get("query", default=None)
+        await ctx.set("rag_pipeline", QueryPipeline(
+            chain=[DEFAULT_RAG_PROMPT, llm]
+        ))
 
-        response = await summarizer.asynthesize(query, nodes=ev.nodes)
-        print("Finished synthesize step")
-        return StopEvent(result=response)
+        await ctx.set("llm", llm)
+        await ctx.set("index", index)
 
+        await ctx.set("query_str", query_str)
+        await ctx.set("retriever_kwargs", retriever_kwargs)
 
-# async def main():
-#     print("Initializing workflow")
-#     w = RAGWorkflow()
+        return PrepEvent()
 
-#     # Run a query
-#     print("Running query")
-#     await init_tracing()
-#     result = await w.run(query="How was Llama2 trained?")
-#     async for chunk in result.async_response_gen():
-#         print(chunk, end="", flush=True)
-#     print("Query completed")
+    @step
+    async def retrieve(
+        self, ctx: Context, ev: PrepEvent
+    ) -> RetrieveEvent | None:
+        """Retrieve the relevant nodes for the query."""
+        query_str = await ctx.get("query_str")
+        retriever_kwargs = await ctx.get("retriever_kwargs")
 
-# if __name__ == "__main__":
-#     print("Starting main")
-#     asyncio.run(main())
-#     print("Main completed")
-    
-from opentelemetry.sdk import trace as trace_sdk
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-    OTLPSpanExporter as HTTPSpanExporter,
-)
-from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
+        if query_str is None:
+            return None
 
+        index = await ctx.get("index", default=None)
+        if not (index):
+            raise ValueError(
+                "Index and tavily tool must be constructed. Run with 'documents' and 'tavily_ai_apikey' params first."
+            )
+
+        retriever: BaseRetriever = index.as_retriever(
+            **retriever_kwargs
+        )
+        result = retriever.retrieve(query_str)
+        await ctx.set("query_str", query_str)
+        return RetrieveEvent(retrieved_nodes=result)
+
+    @step
+    async def augment_and_generate(self, ctx: Context, ev: RetrieveEvent) -> StopEvent:
+        """Get result with relevant text."""
+        relevant_nodes = ev.retrieved_nodes
+        relevant_text = "\n".join([node.get_content() for node in relevant_nodes])
+        query_str = await ctx.get("query_str")
+
+        relevancy_pipeline = await ctx.get("rag_pipeline")
+
+        relevancy = relevancy_pipeline.run(
+                context=relevant_text, question=query_str
+        )
+
+        return StopEvent(result=relevancy.message.content)
 
 async def main():
-    print("Initializing workflow")
-    w = RAGWorkflow()
-
-    # Run a query
-    print("Running query")
-    # Add Phoenix
-    span_phoenix_processor = SimpleSpanProcessor(
-        HTTPSpanExporter(endpoint="https://app.phoenix.arize.com/v1/traces")
+    draw_all_possible_flows(
+        WorkflowRAG, filename="wf_rag_workflow.html"
     )
-    # Add them to the tracer
-    tracer_provider = trace_sdk.TracerProvider()
-    tracer_provider.add_span_processor(span_processor=span_phoenix_processor)
 
-    # Instrument the application
-    LlamaIndexInstrumentor().instrument(tracer_provider=tracer_provider)
+    rag_workflow = WorkflowRAG()
+    index = await rag_workflow.run()
+
+    response = await rag_workflow.run(
+        query_str="How do I install oh my zsh?",
+        index=index,
+    )
+    markdown_content = str(response)
     
-    # return result
-    result = await w.run(query="How was Llama2 trained?")
-    async for chunk in result.async_response_gen():
-        print(chunk, end="", flush=True)
-    print("Query completed")
+    # Output the markdown content to the terminal
+    display(Markdown(markdown_content))
+    
+    return markdown_content
 
 if __name__ == "__main__":
-    print("Starting main")
-    asyncio.run(main())
-    print("Main completed")
+    import asyncio
+    output = asyncio.run(main())
+    print(output)
