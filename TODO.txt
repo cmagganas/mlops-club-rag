@@ -1,6 +1,0 @@
-# TODO
-- [ ] Create a simple LlamaIndex Workflow RAG system
-    - [ ] reranker
-    - [ ] synthesizer
-- [ ] Find out how to deploy workflow with the deployment.yaml file
-- [ ] Make the phoenix tracing work with the workflow
