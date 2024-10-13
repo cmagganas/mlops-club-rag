@@ -145,7 +145,7 @@ class WorkflowRAG(Workflow):
 
         return StopEvent(result=relevancy.message.content)
 
-async def main():
+async def main(question: str):
     draw_all_possible_flows(
         WorkflowRAG, filename="wf_rag_workflow.html"
     )
@@ -154,7 +154,7 @@ async def main():
     index = await rag_workflow.run()
 
     response = await rag_workflow.run(
-        query_str="How do I install oh my zsh?",
+        query_str=question,
         index=index,
     )
     markdown_content = str(response)
@@ -162,6 +162,7 @@ async def main():
     return markdown_content
 
 if __name__ == "__main__":
+    import argparse
     import asyncio
     from rich.console import Console
     from rich.markdown import Markdown
@@ -172,7 +173,18 @@ if __name__ == "__main__":
     )
     from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
 
-
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Run the RAG workflow with a question."
+    )
+    parser.add_argument(
+        "-question",
+        type=str,
+        default="How do I install oh my zsh?",
+        help="The question to ask the RAG workflow.",
+    )
+    args = parser.parse_args()
+    
     # Add Phoenix
     span_phoenix_processor = SimpleSpanProcessor(
         HTTPSpanExporter(endpoint="https://app.phoenix.arize.com/v1/traces")
@@ -184,7 +196,7 @@ if __name__ == "__main__":
     # Instrument the application
     LlamaIndexInstrumentor().instrument(tracer_provider=tracer_provider)
 
-    output = asyncio.run(main())
+    output = asyncio.run(main(args.question))
     
     # Output the markdown content to the terminal using rich
     console = Console()

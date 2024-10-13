@@ -6,7 +6,7 @@ control-plane:
 default-service: rag_workflow
 
 services:
-  echo_workflow:
+  rag_workflow:
     name: RAG Workflow
     # We tell Llama Deploy where to look for our workflow
     source:
@@ -16,4 +16,4 @@ services:
       # current working directory containing the file workflow.py we created previously
       name: ./src
     # This assumes the file workflow.py contains a variable called `echo_workflow` containing our workflow instance
-    path: workflow:RAGWorkflow
+    path: workflow:WorkflowRAG
