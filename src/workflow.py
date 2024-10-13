@@ -51,7 +51,7 @@ class RAGWorkflow(Workflow):
 
     @step
     async def retrieve(self, ctx: Context, ev: StartEvent) -> RetrieverEvent | None:
-        "Entry point for RAG, triggered by a StartEvent with `query`."
+        print("Starting retrieve step")
         query = ev.get("query")
         pc = Pinecone(api_key=os.environ["PINECONE_API"])
 
@@ -62,6 +62,7 @@ class RAGWorkflow(Workflow):
         index = VectorStoreIndex.from_vector_store(vector_store)
 
         if not query:
+            print("No query provided")
             return None
 
         print(f"Query the database with: {query}")
@@ -77,40 +78,87 @@ class RAGWorkflow(Workflow):
         retriever = index.as_retriever(similarity_top_k=2)
         nodes = await retriever.aretrieve(query)
         print(f"Retrieved {len(nodes)} nodes.")
+        print("Finished retrieve step")
         return RetrieverEvent(nodes=nodes)
 
     @step
     async def rerank(self, ctx: Context, ev: RetrieverEvent) -> RerankEvent:
+        print("Starting rerank step")
         # Rerank the nodes
         ranker = LLMRerank(
             choice_batch_size=5, top_n=3, llm=OpenAI(model="gpt-4o-mini")
         )
-        print(await ctx.get("query", default=None), flush=True)
+        query = await ctx.get("query", default=None)
+        print(f"Query for reranking: {query}", flush=True)
         new_nodes = ranker.postprocess_nodes(
-            ev.nodes, query_str=await ctx.get("query", default=None)
+            ev.nodes, query_str=query
         )
         print(f"Reranked nodes to {len(new_nodes)}")
+        print("Finished rerank step")
         return RerankEvent(nodes=new_nodes)
 
     @step
     async def synthesize(self, ctx: Context, ev: RerankEvent) -> StopEvent:
+        print("Starting synthesize step")
         """Return a streaming response using reranked nodes."""
         llm = OpenAI(model="gpt-4o-mini")
         summarizer = CompactAndRefine(llm=llm, streaming=True, verbose=True)
         query = await ctx.get("query", default=None)
 
         response = await summarizer.asynthesize(query, nodes=ev.nodes)
+        print("Finished synthesize step")
         return StopEvent(result=response)
 
 
+# async def main():
+#     print("Initializing workflow")
+#     w = RAGWorkflow()
+
+#     # Run a query
+#     print("Running query")
+#     await init_tracing()
+#     result = await w.run(query="How was Llama2 trained?")
+#     async for chunk in result.async_response_gen():
+#         print(chunk, end="", flush=True)
+#     print("Query completed")
+
+# if __name__ == "__main__":
+#     print("Starting main")
+#     asyncio.run(main())
+#     print("Main completed")
+    
+from opentelemetry.sdk import trace as trace_sdk
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+    OTLPSpanExporter as HTTPSpanExporter,
+)
+from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
+
+
 async def main():
+    print("Initializing workflow")
     w = RAGWorkflow()
 
     # Run a query
+    print("Running query")
+    # Add Phoenix
+    span_phoenix_processor = SimpleSpanProcessor(
+        HTTPSpanExporter(endpoint="https://app.phoenix.arize.com/v1/traces")
+    )
+    # Add them to the tracer
+    tracer_provider = trace_sdk.TracerProvider()
+    tracer_provider.add_span_processor(span_processor=span_phoenix_processor)
+
+    # Instrument the application
+    LlamaIndexInstrumentor().instrument(tracer_provider=tracer_provider)
+    
+    # return result
     result = await w.run(query="How was Llama2 trained?")
     async for chunk in result.async_response_gen():
         print(chunk, end="", flush=True)
+    print("Query completed")
 
 if __name__ == "__main__":
-    init_tracing()
+    print("Starting main")
     asyncio.run(main())
+    print("Main completed")

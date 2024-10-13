@@ -50,4 +50,5 @@ dependencies = [
     "text-generation==0.7.0",
     "tornado==6.4.1",
     "traitlets==5.14.3",
+    "llama-deploy>=0.2.3",
 ]
