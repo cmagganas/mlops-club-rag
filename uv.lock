@@ -1201,6 +1201,7 @@ dependencies = [
     { name = "opentelemetry-exporter-otlp" },
     { name = "opentelemetry-proto" },
     { name = "opentelemetry-sdk" },
+    { name = "pinecone" },
     { name = "python-dotenv" },
     { name = "reflex" },
     { name = "ruff" },
@@ -1217,6 +1218,7 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp", specifier = ">=1.27.0" },
     { name = "opentelemetry-proto", specifier = ">=1.12.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.27.0" },
+    { name = "pinecone", specifier = "==5.3.1" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "reflex", specifier = ">=0.6.2.post1" },
     { name = "ruff", specifier = ">=0.6.9" },
@@ -1627,6 +1629,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7b/f9/cfaa5082ca9bc4a6de66ffe1c12c2d90bf09c309a5f52b27759a596900e7/pillow-10.4.0-cp313-cp313-win32.whl", hash = "sha256:551d3fd6e9dc15e4c1eb6fc4ba2b39c0c7933fa113b220057a34f4bb3268a060", size = 2235603 },
     { url = "https://files.pythonhosted.org/packages/01/6a/30ff0eef6e0c0e71e55ded56a38d4859bf9d3634a94a88743897b5f96936/pillow-10.4.0-cp313-cp313-win_amd64.whl", hash = "sha256:030abdbe43ee02e0de642aee345efa443740aa4d828bfe8e2eb11922ea6a21ea", size = 2554972 },
     { url = "https://files.pythonhosted.org/packages/48/2c/2e0a52890f269435eee38b21c8218e102c621fe8d8df8b9dd06fabf879ba/pillow-10.4.0-cp313-cp313-win_arm64.whl", hash = "sha256:5b001114dd152cfd6b23befeb28d7aee43553e2402c9f159807bf55f33af8a8d", size = 2243375 },
+]
+
+[[package]]
+name = "pinecone"
+version = "5.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "pinecone-plugin-inference" },
+    { name = "pinecone-plugin-interface" },
+    { name = "python-dateutil" },
+    { name = "tqdm" },
+    { name = "typing-extensions" },
+    { name = "urllib3", marker = "python_full_version < '4.0'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/57/db/893487b2eb62047554f5144bf3fc392db96f1cf032c7733a94723cfdf83b/pinecone-5.3.1.tar.gz", hash = "sha256:a216630331753958f4ebcdc6e6d473402d17152f2194af3e19b3416c73b0dcc4", size = 184679 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/93/0e5ac058c470b04d9e481d69813c1c26148bb2336e85ca0ff787f1fa0fbf/pinecone-5.3.1-py3-none-any.whl", hash = "sha256:dd180963d29cd648f2d58becf18b21f150362aef80446dd3a7ed15cbe85bb4c7", size = 419836 },
 ]
 
 [[package]]

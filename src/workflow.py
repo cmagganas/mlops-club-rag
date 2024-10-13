@@ -1,6 +1,11 @@
+import asyncio
+import os
 from llama_index.core.workflow import Event
 from llama_index.core.schema import NodeWithScore
-from .trace import init_tracing
+from trace import init_tracing
+from vector_store import VectorStore
+
+from pinecone import Pinecone
 
 
 class RetrieverEvent(Event):
@@ -28,28 +33,34 @@ from llama_index.core.workflow import (
 
 from llama_index.llms.openai import OpenAI
 from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.vector_stores.pinecone import PineconeVectorStore
 
 
 class RAGWorkflow(Workflow):
-    @step
-    async def ingest(self, ctx: Context, ev: StartEvent) -> StopEvent | None:
-        """Entry point to ingest a document, triggered by a StartEvent with `dirname`."""
-        dirname = ev.get("dirname")
-        if not dirname:
-            return None
+    # @step
+    # async def load(self, ctx: Context, ev: StartEvent) -> StopEvent | None:
+    #     """Entry point to ingest a document, triggered by a StartEvent with `dirname`."""
+    #     dirname = ev.get("dirname")
+    #     if not dirname:
+    #         return None
 
-        documents = SimpleDirectoryReader(dirname).load_data()
-        index = VectorStoreIndex.from_documents(
-            documents=documents,
-            embed_model=OpenAIEmbedding(model_name="text-embedding-3-small"),
-        )
-        return StopEvent(result=index)
+    #     # Use VectorStore to get the index
+    #     vector_store = VectorStore(input_dir=dirname)
+    #     index = vector_store.populate_index()
+        
+    #     return LoadIndexEvent(index=index)
 
     @step
     async def retrieve(self, ctx: Context, ev: StartEvent) -> RetrieverEvent | None:
         "Entry point for RAG, triggered by a StartEvent with `query`."
         query = ev.get("query")
-        index = ev.get("index")
+        pc = Pinecone(api_key=os.environ["PINECONE_API"])
+
+        pinecone_index = pc.Index(os.environ["PINECONE_INDEX_NAME"])
+        vector_store = PineconeVectorStore(
+            pinecone_index=pinecone_index,
+        )
+        index = VectorStoreIndex.from_vector_store(vector_store)
 
         if not query:
             return None
@@ -93,16 +104,14 @@ class RAGWorkflow(Workflow):
         return StopEvent(result=response)
 
 
-w = RAGWorkflow()
+async def main():
+    w = RAGWorkflow()
 
-# Ingest the documents
-index = await w.run(dirname="data")
-
-# Run a query
-result = await w.run(query="How was Llama2 trained?", index=index)
-async for chunk in result.async_response_gen():
-    print(chunk, end="", flush=True)
-
+    # Run a query
+    result = await w.run(query="How was Llama2 trained?")
+    async for chunk in result.async_response_gen():
+        print(chunk, end="", flush=True)
 
 if __name__ == "__main__":
     init_tracing()
+    asyncio.run(main())

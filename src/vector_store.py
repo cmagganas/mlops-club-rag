@@ -14,7 +14,7 @@ load_dotenv()
 class VectorStore(BaseReader):
     def __init__(
         self,
-        input_dir="./out",
+        input_dir="out",
         recursive=True,
         exclude=["*.srt"],
         file_metadata=lambda x: {"source": x},
@@ -29,6 +29,7 @@ class VectorStore(BaseReader):
         self.index_name = index_name
 
     def load_data(self):
+        print(f"Loading data from directory: {self.input_dir}")
         reader = SimpleDirectoryReader(
             input_dir=self.input_dir,
             recursive=self.recursive,
@@ -46,30 +47,40 @@ class VectorStore(BaseReader):
                 metric="dotproduct",
                 spec=ServerlessSpec(cloud="aws", region="us-east-1"),
             )
-            return pc.Index(self.index_name)
-        else:
-            return pc.Index(self.index_name)
+        return pc.Index(self.index_name)
 
     def populate_index(self):
-        documents = self.load_data()
-        index = self.instantiate_index()
+        # Check if the index already exists
+        pc = Pinecone(api_key=self.pinecone_api_key)
+        if pc.has_index(self.index_name):
+            print(f"Using existing Pinecone index: {self.index_name}")
+            pinecone_index = pc.Index(self.index_name)
+        else:
+            # Create Index
+            print(f"Creating new Pinecone index: {self.index_name}")
+            documents = self.load_data()
+            pinecone_index = self.instantiate_index()
 
         vector_store = PineconeVectorStore(
-            pinecone_index=index,
+            pinecone_index=pinecone_index,
             add_sparse_vector=True,
         )
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
-        return VectorStoreIndex.from_documents(
-            documents, storage_context=storage_context
+        index = VectorStoreIndex.from_documents(
+            self.load_data(), storage_context=storage_context
         )
+        return index
 
     def query_engine(self):
         index = self.populate_index()
-        return index.as_query_engine()
+        # Assuming VectorStoreIndex is the correct type that has the as_query_engine method
+        if isinstance(index, VectorStoreIndex):
+            return index.as_query_engine(vector_store_query_mode="hybrid")
+        else:
+            raise TypeError("The index object is not of type VectorStoreIndex")
 
 
 if __name__ == "__main__":
     vc = VectorStore()
     qe = vc.query_engine()
-
-    print(qe.query("What is MLOps?"))
+    print(qe.query("How do I install oh my zsh?"))
