@@ -2,8 +2,8 @@
 
 - [x] Scrape Transcript Data
 - [x] Store Data in Pinecone
-
-- [ ] Create a simple LlamaIndex Workflow RAG system
+- [x] Create a simple LlamaIndex Workflow RAG system (in notebook)
+- [ ] Create a simple LlamaIndex Workflow RAG system (in app)
 - [ ] ReEvaluate which of these we need. Simplify and modularize (reproducible)
   - [ ] ingest?
   - [ ] retrieve?

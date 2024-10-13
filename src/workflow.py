@@ -20,7 +20,7 @@ class RerankEvent(Event):
     nodes: list[NodeWithScore]
 
 
-from llama_index.core import SimpleDirectoryReader, VectorStoreIndex
+from llama_index.core import VectorStoreIndex
 from llama_index.core.response_synthesizers import CompactAndRefine
 from llama_index.core.postprocessor.llm_rerank import LLMRerank
 from llama_index.core.workflow import (
@@ -32,7 +32,6 @@ from llama_index.core.workflow import (
 )
 
 from llama_index.llms.openai import OpenAI
-from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.pinecone import PineconeVectorStore
 
 

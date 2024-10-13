@@ -32,7 +32,6 @@ pip install uv
 uv sync
 ```
 
-
 ## Usage
 
 1. Data Cleaning:
@@ -51,7 +50,7 @@ uv sync
 
 3. RAG Workflow:
    To run the RAG workflow:
-   
+
    ```bash
    python src/workflow.py
    ```
